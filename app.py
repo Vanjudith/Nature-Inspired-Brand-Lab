@@ -132,20 +132,26 @@ def main():
         st.subheader("🖼️ Curated Nature Samples")
         st.write("Test immediately with project reference images:")
 
+        # Initialize uploader key in session state for clean widget resets
+        if "uploader_key" not in st.session_state:
+            st.session_state["uploader_key"] = 0
+
         sample_images = {
             "Image 1 (Mountain & Sky)": BASE_DIR / "Images" / "image_one.jpg",
             "Image 2 (Forest & Earth)": BASE_DIR / "Images" / "image_two.jpg",
             "Image 3 (Botanical Flora)": BASE_DIR / "Images" / "image_three.jpg",
         }
 
-        selected_sample = None
         for label, img_path in sample_images.items():
             if img_path.exists():
                 if st.button(label, use_container_width=True):
                     st.session_state["active_sample"] = str(img_path)
-                    st.session_state["uploaded_file_key"] = None
+                    st.session_state["uploader_key"] += 1
+                    st.rerun()
 
         if st.session_state.get("active_sample"):
+            active_p = Path(st.session_state["active_sample"])
+            st.caption(f"Active preset: **{active_p.name}**")
             if st.button("✕ Clear Sample Image", use_container_width=True):
                 st.session_state["active_sample"] = None
                 st.rerun()
@@ -154,10 +160,11 @@ def main():
     col_upload, col_info = st.columns([2, 1])
 
     with col_upload:
+        uploader_k = f"image_uploader_{st.session_state.get('uploader_key', 0)}"
         uploaded_file = st.file_uploader(
             "Upload an image (JPG, PNG, WebP - max 25MB)",
             type=["jpg", "jpeg", "png", "webp"],
-            key="image_uploader",
+            key=uploader_k,
             help="Images are processed locally in your session.",
         )
 
@@ -169,7 +176,7 @@ def main():
         image_source = uploaded_file
         source_name = uploaded_file.name
         # Clear sample if user uploaded a file
-        if "active_sample" in st.session_state:
+        if st.session_state.get("active_sample"):
             st.session_state["active_sample"] = None
     elif st.session_state.get("active_sample"):
         sample_path = Path(st.session_state["active_sample"])
