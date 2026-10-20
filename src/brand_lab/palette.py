@@ -356,25 +356,144 @@ def export_palette_csv(result: PaletteResult) -> str:
     return output.getvalue()
 
 
-def compute_reconstruction_mse(image: Image.Image, result: PaletteResult) -> float:
+def compute_reconstruction_mse(
+    image: Image.Image,
+    result: PaletteResult,
+    chunk_size: int = 100_000,
+) -> float:
     """Preserves diagnostic evaluation from Experiment 002.
 
-    Assigns each pixel of the full image to its nearest palette color in RGB
-    and computes the Mean Squared Error (MSE).
+    Assigns each pixel of the full image to its nearest palette color in standard sRGB
+    space using Euclidean distance and computes the Mean Squared Error (MSE).
+
+    Metric Definition:
+        Reconstruction MSE is the mean squared RGB-vector error per pixel:
+            MSE = (1 / N) * sum_{i=1}^N ||pixel_i - nearest_palette_color_i||^2
+        RGB Vector RMSE is sqrt(MSE). Note that this is the mean squared RGB-vector
+        error per pixel, not conventional per-channel RMSE (which would divide by 3N).
+
+    Uses chunked processing to prevent large memory spikes (avoiding O(N * K * 3)
+    tensor allocations).
+
+    Args:
+        image: PIL Image to evaluate.
+        result: PaletteResult containing the representative colors.
+        chunk_size: Number of pixels to process per chunk (default 100,000).
+
+    Returns:
+        Mean squared RGB-vector error per pixel (MSE).
+
+    Raises:
+        ValueError: If result has no colors or chunk_size < 1.
     """
+    if not result.colors:
+        raise ValueError("PaletteResult contains no colors for MSE calculation.")
+    if chunk_size < 1:
+        raise ValueError(f"chunk_size must be at least 1, got {chunk_size}.")
+
     if image.mode != "RGB":
         image = image.convert("RGB")
 
-    image_array = np.asarray(image, dtype=np.float64)
+    image_array = np.asarray(image, dtype=np.uint8)
     pixels = image_array.reshape(-1, 3)
+    total_pixels = len(pixels)
+
+    if total_pixels == 0:
+        return 0.0
 
     palette_rgb = np.array([c.rgb for c in result.colors], dtype=np.float64)
 
-    # Compute minimum Euclidean distance squared to palette colors in RGB memory-efficiently
-    min_dist_sq = np.full(len(pixels), np.inf, dtype=np.float64)
-    for c in palette_rgb:
-        dist_sq = np.sum((pixels - c) ** 2, axis=1)
-        min_dist_sq = np.minimum(min_dist_sq, dist_sq)
+    total_dist_sq = 0.0
+    for start in range(0, total_pixels, chunk_size):
+        end = min(start + chunk_size, total_pixels)
+        chunk = pixels[start:end].astype(np.float64)
 
-    mse = float(np.mean(min_dist_sq))
+        # Minimum squared Euclidean distance across palette colors for this chunk
+        min_dist_sq = np.full(end - start, np.inf, dtype=np.float64)
+        for c in palette_rgb:
+            diff = chunk - c
+            dist_sq = np.sum(diff * diff, axis=1)
+            min_dist_sq = np.minimum(min_dist_sq, dist_sq)
+
+        total_dist_sq += float(np.sum(min_dist_sq))
+
+    mse = total_dist_sq / total_pixels
     return mse
+
+
+def reconstruct_image(
+    image: Image.Image,
+    result: PaletteResult,
+    chunk_size: int = 100_000,
+) -> Image.Image:
+    """Reconstructs the image using only the extracted palette colors.
+
+    Each pixel in the source image is assigned to the nearest color in the
+    extracted palette using Euclidean distance in standard sRGB space.
+    This matches the metric used in compute_reconstruction_mse.
+
+    Processing is performed in chunks along the flattened pixel array to prevent
+    large memory allocations (strictly avoiding O(N * K * 3) tensor allocations).
+
+    Color Space Rationale:
+        While palette extraction clusters in CIE LAB space for perceptual uniformity,
+        the reconstruction assignment and MSE metric operate in standard sRGB space:
+        1. Output swatches are rounded to valid 8-bit sRGB gamuts.
+        2. sRGB Euclidean assignment guarantees that the reconstructed image
+           directly minimizes the computed sRGB MSE metric.
+        3. sRGB assignment requires no per-pixel LAB color-space transforms on full-size
+           images, maintaining interactive responsiveness in Streamlit.
+        4. Every pixel in the reconstructed image is guaranteed to be an exact member
+           of the returned palette color set.
+
+    Args:
+        image: PIL Image to reconstruct.
+        result: PaletteResult containing the representative colors.
+        chunk_size: Maximum number of pixels to process per chunk (default 100,000).
+
+    Returns:
+        A new PIL Image of identical dimensions and RGB mode, composed entirely
+        of representative palette colors.
+
+    Raises:
+        ValueError: If result contains no colors or chunk_size < 1.
+    """
+    if not result.colors:
+        raise ValueError("PaletteResult contains no colors for reconstruction.")
+    if chunk_size < 1:
+        raise ValueError(f"chunk_size must be at least 1, got {chunk_size}.")
+
+    if image.mode != "RGB":
+        image = image.convert("RGB")
+
+    width, height = image.size
+    if width <= 0 or height <= 0:
+        return Image.new("RGB", (max(0, width), max(0, height)))
+
+    image_array = np.asarray(image, dtype=np.uint8)
+    pixels = image_array.reshape(-1, 3)
+    total_pixels = len(pixels)
+
+    palette_rgb_uint8 = np.array([c.rgb for c in result.colors], dtype=np.uint8)
+    palette_rgb_f32 = palette_rgb_uint8.astype(np.float32)
+
+    reconstructed_pixels = np.empty_like(pixels)
+
+    for start in range(0, total_pixels, chunk_size):
+        end = min(start + chunk_size, total_pixels)
+        chunk = pixels[start:end].astype(np.float32)
+
+        min_dist_sq = np.full(end - start, np.inf, dtype=np.float32)
+        nearest_indices = np.zeros(end - start, dtype=np.int32)
+
+        for k_idx, color in enumerate(palette_rgb_f32):
+            diff = chunk - color
+            dist_sq = np.sum(diff * diff, axis=1)
+            closer = dist_sq < min_dist_sq
+            min_dist_sq[closer] = dist_sq[closer]
+            nearest_indices[closer] = k_idx
+
+        reconstructed_pixels[start:end] = palette_rgb_uint8[nearest_indices]
+
+    reconstructed_array = reconstructed_pixels.reshape(height, width, 3)
+    return Image.fromarray(reconstructed_array, mode="RGB")

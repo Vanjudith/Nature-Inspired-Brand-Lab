@@ -155,9 +155,9 @@ This makes it possible to observe which visual characteristics remain and which 
 
 ### Mean Squared Error (MSE)
 
-MSE measures the average squared difference between the original image's RGB channel values and those of the reconstructed image.
+Reconstruction MSE is the mean squared RGB-vector error per pixel: the average squared Euclidean distance between the original image's 3D RGB pixel vectors and those of the reconstructed image.
 
-The initial five-color RGB reconstruction produced an MSE of approximately 484.20, corresponding to an RMSE of approximately 22 on the 0–255 channel scale.
+The initial five-color RGB reconstruction produced an MSE of approximately 484.20, corresponding to an RGB Vector RMSE of approximately 22 (the square root of MSE; note that this is mean squared RGB-vector error per pixel, not conventional per-channel RMSE).
 
 MSE provides a numerical measure of reconstruction error, but it does not directly measure whether a palette is attractive, perceptually representative, or useful for branding. It must be interpreted alongside visual inspection and further evaluation.
 

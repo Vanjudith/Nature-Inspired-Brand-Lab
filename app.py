@@ -27,6 +27,7 @@ from brand_lab.palette import (
     export_palette_json,
     extract_palette,
     load_and_validate_image,
+    reconstruct_image,
 )
 
 # Page configuration
@@ -217,11 +218,29 @@ def main():
     res_col_left, res_col_right = st.columns([1, 1], gap="large")
 
     with res_col_left:
-        st.subheader("Source Image")
-        st.image(
-            pil_image,
-            caption=f"{source_name} ({pil_image.width} × {pil_image.height} px, {pil_image.mode})",
-            use_container_width=True,
+        st.subheader("Source Image & Reconstruction")
+
+        with st.spinner("Generating palette-reconstructed preview..."):
+            reconstructed_image = reconstruct_image(pil_image, palette_result)
+
+        col_orig, col_recon = st.columns(2)
+        with col_orig:
+            st.image(
+                pil_image,
+                caption=f"Original ({pil_image.width} × {pil_image.height} px)",
+                use_container_width=True,
+            )
+        with col_recon:
+            st.image(
+                reconstructed_image,
+                caption=f"{palette_result.n_colors_returned}-Color Reconstruction ({reconstructed_image.width} × {reconstructed_image.height} px)",
+                use_container_width=True,
+            )
+
+        st.caption(
+            "💡 **Reconstruction Preview:** Each pixel is mapped to its nearest extracted palette color in sRGB space. "
+            "A lower reconstruction error means a closer numerical match to the source, "
+            "not necessarily a better brand palette."
         )
 
         if palette_result.clamped:
@@ -330,8 +349,14 @@ def main():
                 mse = compute_reconstruction_mse(pil_image, palette_result)
                 rmse = mse ** 0.5
             st.write(f"- Reconstruction MSE: `{mse:.2f}`")
-            st.write(f"- Channel RMSE: `{rmse:.2f}` (on 0–255 scale)")
-            st.caption("Diagnostic measure comparing pixel distance between original and 5-color reconstructed image.")
+            st.write(f"- RGB Vector RMSE: `{rmse:.2f}`")
+            st.caption(
+                f"Diagnostic measure comparing pixel distance between original and {palette_result.n_colors_returned}-color reconstructed image in sRGB space. "
+                "Reconstruction MSE is the mean squared RGB-vector error per pixel; "
+                "RGB Vector RMSE is the square root of that value (this is not conventional per-channel RMSE). "
+                "Note: Lower reconstruction error means a closer numerical match to the source, "
+                "not necessarily a better brand palette."
+            )
 
 
 if __name__ == "__main__":

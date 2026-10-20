@@ -17,6 +17,7 @@ from brand_lab.palette import (
     export_palette_json,
     extract_palette,
     load_and_validate_image,
+    reconstruct_image,
 )
 
 HEX_REGEX = re.compile(r"^#[0-9A-F]{6}$")
@@ -242,3 +243,97 @@ class TestCuratedSamplePresets:
                 f"Preset '{label}' mapped to '{img_path.name}', expected '{expected_filename}'"
             )
 
+
+class TestVisualPaletteReconstruction:
+    def test_reconstructed_dimensions_match_input(self, sample_gradient_image: Image.Image):
+        """Reconstruction preserves the exact width, height, and mode of the source."""
+        res = extract_palette(sample_gradient_image, n_colors=5, random_state=42)
+        reconstructed = reconstruct_image(sample_gradient_image, res)
+
+        assert reconstructed.size == sample_gradient_image.size
+        assert reconstructed.width == sample_gradient_image.width
+        assert reconstructed.height == sample_gradient_image.height
+        assert reconstructed.mode == "RGB"
+
+        # Also test rectangular non-square dimensions
+        rect_img = Image.new("RGB", (73, 41), color=(100, 150, 200))
+        rect_res = extract_palette(rect_img, n_colors=3, random_state=42)
+        rect_recon = reconstruct_image(rect_img, rect_res)
+        assert rect_recon.size == (73, 41)
+
+    def test_every_output_pixel_is_palette_color(self, sample_gradient_image: Image.Image):
+        """Every pixel in the reconstructed image is strictly one of the extracted palette colors."""
+        res = extract_palette(sample_gradient_image, n_colors=5, random_state=42)
+        reconstructed = reconstruct_image(sample_gradient_image, res)
+
+        recon_arr = np.asarray(reconstructed, dtype=np.uint8).reshape(-1, 3)
+        unique_recon_colors = {tuple(c) for c in np.unique(recon_arr, axis=0)}
+        palette_colors_set = {c.rgb for c in res.colors}
+
+        # The reconstructed colors must be a subset of the palette colors
+        assert unique_recon_colors.issubset(palette_colors_set), (
+            f"Found colors {unique_recon_colors - palette_colors_set} not present in palette!"
+        )
+
+    def test_zero_error_for_image_composed_entirely_of_palette_colors(self):
+        """An image composed strictly of palette colors yields 0.0 MSE and identical pixels."""
+        colors = [(255, 0, 0), (0, 255, 0), (0, 0, 255)]
+        arr = np.zeros((30, 30, 3), dtype=np.uint8)
+        arr[:10, :] = colors[0]
+        arr[10:20, :] = colors[1]
+        arr[20:, :] = colors[2]
+
+        pure_img = Image.fromarray(arr, mode="RGB")
+        res = extract_palette(pure_img, n_colors=3, random_state=42)
+
+        mse = compute_reconstruction_mse(pure_img, res)
+        assert pytest.approx(mse, abs=1e-5) == 0.0
+
+        reconstructed = reconstruct_image(pure_img, res)
+        recon_arr = np.asarray(reconstructed, dtype=np.uint8)
+        assert np.array_equal(arr, recon_arr)
+
+    def test_reconstruction_deterministic_for_identical_input(
+        self, sample_gradient_image: Image.Image
+    ):
+        """Reconstruction is strictly deterministic given identical input and palette."""
+        res = extract_palette(sample_gradient_image, n_colors=5, random_state=42)
+
+        recon1 = reconstruct_image(sample_gradient_image, res)
+        recon2 = reconstruct_image(sample_gradient_image, res)
+
+        arr1 = np.asarray(recon1)
+        arr2 = np.asarray(recon2)
+        assert np.array_equal(arr1, arr2)
+
+    def test_chunking_consistency_and_edge_cases(
+        self, sample_gradient_image: Image.Image, tiny_image: Image.Image, rgba_image: Image.Image
+    ):
+        """Reconstruction and MSE produce identical results regardless of chunk size."""
+        res = extract_palette(sample_gradient_image, n_colors=5, random_state=42)
+
+        # Compare large chunk (default 100k) vs tiny chunk (e.g. 37 pixels)
+        recon_default = reconstruct_image(sample_gradient_image, res, chunk_size=100_000)
+        recon_chunked = reconstruct_image(sample_gradient_image, res, chunk_size=37)
+        assert np.array_equal(np.asarray(recon_default), np.asarray(recon_chunked))
+
+        mse_default = compute_reconstruction_mse(sample_gradient_image, res, chunk_size=100_000)
+        mse_chunked = compute_reconstruction_mse(sample_gradient_image, res, chunk_size=37)
+        assert pytest.approx(mse_default, rel=1e-6) == mse_chunked
+
+        # Tiny image (4 pixels)
+        tiny_res = extract_palette(tiny_image, n_colors=2, random_state=42)
+        tiny_recon = reconstruct_image(tiny_image, tiny_res, chunk_size=2)
+        assert tiny_recon.size == tiny_image.size
+
+        # RGBA image auto-converts to RGB
+        rgba_res = extract_palette(rgba_image, n_colors=3, random_state=42)
+        rgba_recon = reconstruct_image(rgba_image, rgba_res)
+        assert rgba_recon.mode == "RGB"
+        assert rgba_recon.size == rgba_image.size
+
+        # Invalid chunk size
+        with pytest.raises(ValueError, match="chunk_size must be at least 1"):
+            reconstruct_image(sample_gradient_image, res, chunk_size=0)
+        with pytest.raises(ValueError, match="chunk_size must be at least 1"):
+            compute_reconstruction_mse(sample_gradient_image, res, chunk_size=0)
