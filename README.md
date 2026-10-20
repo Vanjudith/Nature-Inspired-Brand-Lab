@@ -54,7 +54,7 @@ Run the test suite with `pytest`:
 pytest -v
 ```
 
-The test suite validates:
+The 23-test automated test suite validates:
 - Standard RGB image palette extraction.
 - Valid 7-character uppercase HEX formatting (`#RRGGBB`).
 - Cluster proportion calculations summing to ~100%.
@@ -65,6 +65,12 @@ The test suite validates:
 - Error handling on corrupted and non-image files.
 - Deterministic reproducibility under fixed random seeds.
 - JSON and CSV export validity and re-parseability.
+- Curated preset consistency and image file existence.
+- Side-by-side visual reconstruction dimension preservation.
+- Strict palette-color membership for all reconstructed pixels.
+- Exact zero error (MSE = 0.0) on images composed entirely of palette colors.
+- Deterministic visual reconstruction outputs.
+- Memory-conscious chunking consistency across different chunk sizes (e.g., 37 vs 100,000 pixels).
 
 ---
 
@@ -89,8 +95,9 @@ The test suite validates:
 [Dominance Ranking & Gamut Clipping]
        │ (Sorted by cluster pixel population; clipped to sRGB)
        ▼
-[Exportable Palettes & Swatches]
-       └── HEX Swatches, RGB, LAB, Cluster %, JSON & CSV Exports
+[Palette & Reconstruction Pipeline]
+       ├── Extracted Swatches: HEX, RGB, LAB, Cluster %, JSON & CSV Exports
+       └── Memory-Conscious sRGB Reconstruction & RGB Vector RMSE
 ```
 
 ### Why CIE LAB instead of RGB?
@@ -110,15 +117,16 @@ K-Means clusters colors based on perceptual distance, resulting in representativ
 - **Multi-Format Upload**: Supports JPEG, PNG (with transparency handling), and WebP files up to 25 MB.
 - **Curated Nature Samples**: Instant one-click testing with high-resolution reference nature images from Pixabay.
 - **Representative 5-Color Default**: Extracts an initial 5-color palette, with an adjustable cluster count slider (2 to 10 colors).
-- **Cluster Coverage %**: Shows the percentage of sampled pixels corresponding to each color group.
+- **Cluster Coverage %**: Shows the percentage of sampled pixels corresponding to each color group with an explicit explanatory caption.
 - **Dominance Sorting**: Colors are automatically sorted from most dominant to accent colors.
+- **Visual Palette Reconstruction Preview**: Side-by-side comparison of the original image and reconstructed preview rendered strictly with the extracted $K$ palette colors at matching dimensions.
+- **Diagnostic Error Evaluation**: Accurately computes sample-vs-full mean RGB, Reconstruction MSE (mean squared RGB-vector error per pixel), and RGB Vector RMSE ($\sqrt{\text{MSE}}$).
 - **One-Click Export**:
   - Copy individual HEX codes with one click.
   - Copy the full palette as a space-separated HEX string.
   - Download structured JSON with RGB, LAB, counts, and percentages.
   - Download CSV for spreadsheet workflows.
 - **Graceful Edge Cases**: Flat images with fewer unique colors than $K$ are automatically clamped without crashing.
-- **Diagnostic Evaluation**: Preserves research findings by displaying sample-vs-full mean RGB and image reconstruction Mean Squared Error (MSE).
 
 ---
 
@@ -135,8 +143,9 @@ Nature-Inspired-Brand-Lab/
 │       └── palette.py          # Core image processing & color science pipeline
 ├── tests/
 │   ├── __init__.py
-│   └── test_palette.py         # Automated test suite (18 test cases)
+│   └── test_palette.py         # Automated test suite (23 test cases)
 ├── Docs/
+│   ├── Portfolio_Case_Study.md # Comprehensive engineering case study
 │   └── System_Design.md        # Initial system design and requirements
 ├── Images/                     # Pixabay nature reference inspiration images
 │   ├── image_one.jpg
@@ -152,16 +161,18 @@ Nature-Inspired-Brand-Lab/
 
 Previous experiments and documentation remain fully preserved:
 - `Docs/System_Design.md`: Initial architecture, sampling theory, and hypothesis definitions.
+- `Docs/Portfolio_Case_Study.md`: Comprehensive engineering case study covering architecture, trade-offs, and verification.
 - `01_image_as_data.ipynb`: Exploratory experiments covering Pillow arrays, HSV/LAB conversions, elbow analysis, and initial reconstruction MSE benchmarks.
 
 ---
 
 ## ⚠️ Known Limitations
 
-1. **Local MVP**: Shipped and verified as a local web application. Not hosted on a public domain.
-2. **Spatial Ignorance**: K-Means clusters color values independent of their spatial location. A tiny focal flower and scattered noise pixels with the same color are treated identically.
-3. **Cluster Proportions**: Percentages represent proportions of the sampled pixels (50,000 pixels), which closely approximate but do not exactly equal full-image counts.
-4. **Zero-Budget Constraints**: No external paid APIs or cloud dependencies are required.
+1. **Numerical Error vs. Brand Aesthetics**: Reconstruction error (MSE and RGB Vector RMSE) measures numerical pixel similarity in Euclidean RGB space, not brand suitability, aesthetic harmony, color balance, accessibility (contrast ratios), or emotional resonance.
+2. **Local MVP**: Shipped and verified as a local web application. Not hosted on a public domain.
+3. **Spatial Ignorance**: K-Means clusters color values independent of their spatial location. A tiny focal flower and scattered noise pixels with the same color are treated identically.
+4. **Cluster Proportions**: Percentages represent proportions of the sampled pixels (50,000 pixels), which closely approximate but do not exactly equal full-image counts.
+5. **Zero-Budget Constraints**: No external paid APIs or cloud dependencies are required.
 
 ---
 
