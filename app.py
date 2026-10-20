@@ -96,6 +96,13 @@ st.markdown(
 )
 
 
+CURATED_SAMPLES: dict[str, Path] = {
+    "Image 1 (Jellyfish & Blue Water)": BASE_DIR / "Images" / "image_one.jpg",
+    "Image 2 (Translucent Jellyfish on Dark Background)": BASE_DIR / "Images" / "image_two.jpg",
+    "Image 3 (Blue-and-Yellow Tropical Fish)": BASE_DIR / "Images" / "image_three.jpg",
+}
+
+
 def get_contrast_text_color(rgb: tuple[int, int, int]) -> str:
     """Calculates relative luminance to pick white or dark text for contrast."""
     r, g, b = [x / 255.0 for x in rgb]
@@ -136,11 +143,7 @@ def main():
         if "uploader_key" not in st.session_state:
             st.session_state["uploader_key"] = 0
 
-        sample_images = {
-            "Image 1 (Mountain & Sky)": BASE_DIR / "Images" / "image_one.jpg",
-            "Image 2 (Forest & Earth)": BASE_DIR / "Images" / "image_two.jpg",
-            "Image 3 (Botanical Flora)": BASE_DIR / "Images" / "image_three.jpg",
-        }
+        sample_images = CURATED_SAMPLES
 
         for label, img_path in sample_images.items():
             if img_path.exists():
@@ -252,7 +255,10 @@ def main():
 
     with res_col_right:
         st.subheader(f"Extracted Brand Palette ({palette_result.n_colors_returned} Colors)")
-        st.caption("Colors sorted by visual dominance in sampled pixels (highest cluster population first).")
+        st.caption(
+            "Colors sorted by visual dominance in sampled pixels (highest cluster population first). "
+            "Each percentage represents the share of sampled image pixels assigned to that color cluster."
+        )
 
         # Horizontal overview bar
         swatch_cols = st.columns(palette_result.n_colors_returned)

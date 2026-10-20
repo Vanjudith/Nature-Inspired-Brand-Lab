@@ -221,3 +221,24 @@ class TestDiagnosticsAndRealImages:
             assert HEX_REGEX.match(c.hex)
         assert pytest.approx(sum(c.percentage for c in res.colors), rel=1e-3) == 100.0
 
+
+class TestCuratedSamplePresets:
+    def test_curated_preset_labels_and_files(self):
+        """Verifies preset labels and that each maps to the correct existing image file."""
+        from app import CURATED_SAMPLES
+
+        expected = {
+            "Image 1 (Jellyfish & Blue Water)": "image_one.jpg",
+            "Image 2 (Translucent Jellyfish on Dark Background)": "image_two.jpg",
+            "Image 3 (Blue-and-Yellow Tropical Fish)": "image_three.jpg",
+        }
+
+        assert len(CURATED_SAMPLES) == 3
+        for label, expected_filename in expected.items():
+            assert label in CURATED_SAMPLES, f"Preset label '{label}' not found in CURATED_SAMPLES"
+            img_path = Path(CURATED_SAMPLES[label])
+            assert img_path.exists(), f"Image path does not exist: {img_path}"
+            assert img_path.name == expected_filename, (
+                f"Preset '{label}' mapped to '{img_path.name}', expected '{expected_filename}'"
+            )
+

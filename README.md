@@ -135,7 +135,7 @@ Nature-Inspired-Brand-Lab/
 │       └── palette.py          # Core image processing & color science pipeline
 ├── tests/
 │   ├── __init__.py
-│   └── test_palette.py         # Automated test suite (17 test cases)
+│   └── test_palette.py         # Automated test suite (18 test cases)
 ├── Docs/
 │   └── System_Design.md        # Initial system design and requirements
 ├── Images/                     # Pixabay nature reference inspiration images
